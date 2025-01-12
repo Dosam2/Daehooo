@@ -18,6 +18,9 @@ public class ShipController : MonoBehaviour, IShip
     private float targetSpeed; // 목표 속도 추가
     private bool isFirstMove = true;
 
+    private bool hasReachedTargetRotation = false;
+
+    private Vector3 targetDestination;
     public ShipType Type => shipType;
 
     private void Awake()
@@ -38,53 +41,59 @@ public class ShipController : MonoBehaviour, IShip
 
     private void UpdateMovement()
     {
-        // Y 위치 고정
         transform.position = new Vector3(transform.position.x, 0, transform.position.z);
 
-        // 현재 방향과 목표 방향 사이의 각도 계산
-        float angle = Vector3.SignedAngle(transform.forward, targetDirection, Vector3.up);
-        bool isRotating = Mathf.Abs(angle) > 0.1f;
+        Vector3 targetDir = (targetDestination - transform.position).normalized;
+        float angle = Vector3.SignedAngle(transform.forward, targetDir, Vector3.up);
+        bool isRotating = !hasReachedTargetRotation && Mathf.Abs(angle) > 0.1f;
 
-        if (isFirstMove && isRotating)
+        if (isRotating)
         {
-            // 첫 출발 시에만 즉시 회전
-            transform.rotation = Quaternion.LookRotation(targetDirection);
-            isFirstMove = false;
-            targetSpeed = specs.maxSpeed;
-        }
-        else if (isRotating)
-        {
-            // 이동 중 회전 - 부드럽게 회전
-            float rotationAmount = Mathf.Sign(angle) * specs.rotationSpeed * Time.deltaTime;
-            transform.Rotate(Vector3.up, rotationAmount);
+            // 회전각에 따른 속도 조절
+            float speedMultiplier = 1f;
+            float rotationMultiplier = 1f;
 
-            // 회전 중일 때의 목표 속도로 천천히 조절
-            if (currentSpeed > specs.rotationSpeed)
+            if (Mathf.Abs(angle) > 90f)
             {
-                targetSpeed = specs.rotationSpeed;
+                speedMultiplier = 0.3f;
+                rotationMultiplier = 0.7f;
             }
+            else if (Mathf.Abs(angle) > 60f)
+            {
+                speedMultiplier = 0.4f;
+                rotationMultiplier = 0.8f;
+            }
+            else if (Mathf.Abs(angle) > 30f)
+            {
+                speedMultiplier = 0.5f;
+                rotationMultiplier = 0.9f;
+            }
+
+            float rotationAmount = Mathf.Sign(angle) * specs.rotationSpeed * rotationMultiplier * Time.deltaTime;
+            if (Mathf.Abs(rotationAmount) > Mathf.Abs(angle))
+            {
+                rotationAmount = angle;
+                hasReachedTargetRotation = true;
+            }
+
+            transform.Rotate(Vector3.up, rotationAmount);
+            targetSpeed = specs.maxSpeed * speedMultiplier;
         }
         else
         {
-            // 직진 시의 목표 속도
             targetSpeed = specs.maxSpeed;
         }
 
-        // 현재 속도를 목표 속도로 부드럽게 변경
         currentSpeed = Mathf.Lerp(currentSpeed, targetSpeed, specs.acceleration * Time.deltaTime);
-
-        // 전진
         transform.Translate(Vector3.forward * currentSpeed * Time.deltaTime, Space.Self);
-
-        // 디버그 정보 출력
-        Debug.Log($"Current Speed: {currentSpeed:F4}, Target Speed: {targetSpeed:F4}, Rotating: {isRotating}");
     }
 
     public void Navigate(Vector3 destination)
     {
-        Vector3 direction = (destination - transform.position).normalized;
-        direction.y = 0;
-        targetDirection = direction;
+        targetDestination = destination;
+        targetDirection = (destination - transform.position).normalized;
+        targetDirection.y = 0;
+        hasReachedTargetRotation = false; // 새로운 목적지가 설정될 때 리셋
 
         isMoving = true;
         isDocking = false;
@@ -92,7 +101,7 @@ public class ShipController : MonoBehaviour, IShip
         if (!isEngineRunning)
         {
             StartEngine();
-            isFirstMove = true; // 엔진 시작할 때만 첫 출발로 설정
+            isFirstMove = true;
         }
     }
 
@@ -157,11 +166,7 @@ public class ShipController : MonoBehaviour, IShip
         isEngineRunning = false;
     }
 
-    private void StopMoving()
-    {
-        isMoving = false;
-        currentSpeed = 0f;
-    }
+
     private void SetupShipTypeSpecifications()
     {
         switch (shipType)
