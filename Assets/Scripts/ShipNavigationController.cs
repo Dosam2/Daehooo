@@ -9,6 +9,9 @@ public class ShipNavigationController : MonoBehaviour
     private LineRenderer pathLine;
     private Vector3 targetPoint;
     private bool isPathActive = false;
+    private EnhancedShipController enhancedController;
+    private bool isTargetDock = false; // Dock 여부 추적
+    private Vector3 lastDockPosition; // 마지막 Dock 위치 저장
 
     [SerializeField] private float pathWidth = 0.2f;
     [SerializeField] private Color pathColor = Color.white;
@@ -21,15 +24,21 @@ public class ShipNavigationController : MonoBehaviour
     {
         shipController = GetComponent<ShipController>();
         mainCamera = Camera.main;
+        enhancedController = GetComponent<EnhancedShipController>();
         SetupLineRenderer();
     }
 
     private void SetupLineRenderer()
     {
-        if (GetComponent<LineRenderer>() != null)
-            Destroy(GetComponent<LineRenderer>());
+        // if (GetComponent<LineRenderer>() != null)
+        //     Destroy(GetComponent<LineRenderer>());
 
-        pathLine = gameObject.AddComponent<LineRenderer>();
+        pathLine = GetComponent<LineRenderer>();
+
+        if (pathLine == null)
+        {
+            pathLine = gameObject.AddComponent<LineRenderer>();
+        }
         pathLine.startWidth = pathWidth;
         pathLine.endWidth = pathWidth;
 
@@ -91,7 +100,20 @@ public class ShipNavigationController : MonoBehaviour
             if (Physics.Raycast(ray, out hit))
             {
                 targetPoint = new Vector3(hit.point.x, pathHeight, hit.point.z);
-                DrawPredictedPath(transform.position, targetPoint);
+                isTargetDock = hit.collider.CompareTag("Dock");
+
+                if (isTargetDock)
+                {
+                    lastDockPosition = targetPoint;
+                    Vector3[] pathPoints = enhancedController.CalculatePathToDock(targetPoint);
+                    pathLine.positionCount = pathPoints.Length;
+                    pathLine.SetPositions(pathPoints);
+                }
+                else
+                {
+                    isTargetDock = false;
+                    DrawPredictedPath(transform.position, targetPoint);
+                }
             }
         }
 
@@ -119,13 +141,25 @@ public class ShipNavigationController : MonoBehaviour
         float distanceToTarget = Vector3.Distance(transform.position, targetPoint);
         if (distanceToTarget > 0.1f)
         {
-            DrawPredictedPath(transform.position, targetPoint);
+            if (isTargetDock)
+            {
+                // Dock으로 가는 경로 업데이트
+                Vector3[] pathPoints = enhancedController.CalculatePathToDock(lastDockPosition);
+                pathLine.positionCount = pathPoints.Length;
+                pathLine.SetPositions(pathPoints);
+            }
+            else
+            {
+                DrawPredictedPath(transform.position, targetPoint);
+            }
         }
         else
         {
             isPathActive = false;
             pathLine.enabled = false;
+            isTargetDock = false;
         }
+
     }
 
     private void DrawPredictedPath(Vector3 startPos, Vector3 endPos)
@@ -181,7 +215,8 @@ public class ShipNavigationController : MonoBehaviour
                 Vector3 center = startPos + (Quaternion.Euler(0, angle / 2, 0) * startDir * turnRadius);
                 Quaternion rotation = Quaternion.Euler(0, currentAngle, 0);
                 Vector3 offset = rotation * (-startDir * turnRadius);
-                points[i] = center + offset;
+                // points[i] = center + offset;
+                points[i] = Vector3.Lerp(startPos, endPos, currentAngle);
                 points[i].y = pathHeight;
             }
 
@@ -210,13 +245,6 @@ public class ShipNavigationController : MonoBehaviour
         pathLine.SetPositions(points);
     }
 
-    private Vector3 QuadraticBezier(Vector3 start, Vector3 control, Vector3 end, float t)
-    {
-        float u = 1 - t;
-        float tt = t * t;
-        float uu = u * u;
-        return uu * start + 2 * u * t * control + tt * end;
-    }
 
     private void OnDestroy()
     {

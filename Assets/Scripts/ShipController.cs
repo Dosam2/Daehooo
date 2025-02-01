@@ -1,5 +1,6 @@
 using System.Collections;
 using UnityEngine;
+using System.Collections.Generic;
 
 public class ShipController : MonoBehaviour, IShip
 {
@@ -23,14 +24,16 @@ public class ShipController : MonoBehaviour, IShip
     private Vector3 targetDestination;
     public ShipType Type => shipType;
 
+    private EnhancedShipController enhancedController;
+
     private void Awake()
     {
         rb = GetComponent<Rigidbody>();
         rb.mass = specs.mass;
         startPosition = transform.position;
         SetupShipTypeSpecifications();
+        enhancedController = GetComponent<EnhancedShipController>();
     }
-
     private void Update()
     {
         if (isEngineRunning && isMoving && !isDocking && !isRespawning)
@@ -103,6 +106,11 @@ public class ShipController : MonoBehaviour, IShip
             StartEngine();
             isFirstMove = true;
         }
+    }
+    //EnhanchedShipController에서 속도 전송시 사용
+        public float GetCurrentSpeed()
+    {
+        return currentSpeed;
     }
 
     public void OnDockReached()
